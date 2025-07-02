@@ -2,7 +2,6 @@ import torch
 import torch.nn as nn
 import numpy as np
 from .spline import *
-from .utils import sparse_mask
 
 
 class KANLayer(nn.Module):
@@ -41,7 +40,7 @@ class KANLayer(nn.Module):
             device
     """
 
-    def __init__(self, in_dim=3, out_dim=2, num=5, k=3, noise_scale=0.5, scale_base_mu=0.0, scale_base_sigma=1.0, scale_sp=1.0, base_fun=torch.nn.SiLU(), grid_eps=0.02, grid_range=[-1, 1], sp_trainable=True, sb_trainable=True, save_plot_data = True, device='cpu', sparse_init=False):
+    def __init__(self, in_dim=3, out_dim=2, num=5, k=3, noise_scale=0.5, scale_base_mu=0.0, scale_base_sigma=1.0, scale_sp=1.0, base_fun=torch.nn.SiLU(), grid_eps=0.02, grid_range=[-1, 1], sp_trainable=True, sb_trainable=True, save_plot_data = True, device='cpu'):
         ''''
         initialize a KANLayer
         
@@ -75,9 +74,7 @@ class KANLayer(nn.Module):
                 If true, scale_base is trainable
             device : str
                 device
-            sparse_init : bool
-                if sparse_init = True, sparse initialization is applied.
-            
+
         Returns:
         --------
             self
@@ -102,10 +99,8 @@ class KANLayer(nn.Module):
 
         self.coef = torch.nn.Parameter(curve2coef(self.grid[:,k:-k].permute(1,0), noises, self.grid, k))
         
-        if sparse_init:
-            self.mask = torch.nn.Parameter(sparse_mask(in_dim, out_dim)).requires_grad_(False)
-        else:
-            self.mask = torch.nn.Parameter(torch.ones(in_dim, out_dim)).requires_grad_(False)
+
+        self.mask = torch.nn.Parameter(torch.ones(in_dim, out_dim)).requires_grad_(False)
         
         self.scale_base = torch.nn.Parameter(scale_base_mu * 1 / np.sqrt(in_dim) + \
                          scale_base_sigma * (torch.rand(in_dim, out_dim)*2-1) * 1/np.sqrt(in_dim)).requires_grad_(sb_trainable)

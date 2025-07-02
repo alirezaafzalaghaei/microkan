@@ -1,6 +1,5 @@
 import torch
 import torch.nn as nn
-import matplotlib.pyplot as plt
 import numpy as np
 from tqdm import tqdm
 from .LBFGS import LBFGS
@@ -10,7 +9,7 @@ torch.manual_seed(seed)
 
 class MLP(nn.Module):
     
-    def __init__(self, width, act='silu', save_act=True, seed=0, device='cpu'):
+    def __init__(self, width, act='silu', seed=0, device='cpu'):
         super(MLP, self).__init__()
         
         torch.manual_seed(seed)
@@ -24,7 +23,6 @@ class MLP(nn.Module):
         
         #if activation == 'silu':
         self.act_fun = torch.nn.SiLU()
-        self.save_act = save_act
         self.acts = None
         
         self.cache_data = None
@@ -48,10 +46,7 @@ class MLP(nn.Module):
                 x = self.cache_data
             else:
                 raise Exception("missing input data x")
-        save_act = self.save_act
-        self.save_act = True
         self.forward(x)
-        self.save_act = save_act
         
     @property
     def w(self):
@@ -68,24 +63,9 @@ class MLP(nn.Module):
         self.a_forward = []
         
         for i in range(self.depth):
-            
-            if self.save_act:
-                act = x.clone()
-                act_scale = torch.std(x, dim=0)
-                wa_forward = act_scale[None, :] * self.linears[i].weight
-                self.acts.append(act)
-                if i > 0:
-                    self.acts_scale.append(act_scale)
-                self.wa_forward.append(wa_forward)
-            
             x = self.linears[i](x)
             if i < self.depth - 1:
                 x = self.act_fun(x)
-            else:
-                if self.save_act:
-                    act_scale = torch.std(x, dim=0)
-                    self.acts_scale.append(act_scale)
-                
         return x
     
     def attribute(self):
@@ -112,47 +92,7 @@ class MLP(nn.Module):
         self.node_scores = list(reversed(node_scores))
         self.edge_scores = list(reversed(edge_scores))
         self.wa_backward = self.edge_scores
-    
-    def plot(self, beta=3, scale=1., metric='w'):
-        # metric = 'w', 'act' or 'fa'
-        
-        if metric == 'fa':
-            self.attribute()
-        
-        depth = self.depth
-        y0 = 0.5
-        fig, ax = plt.subplots(figsize=(3*scale,3*y0*depth*scale))
-        shp = self.width
-        
-        min_spacing = 1/max(self.width)
-        for j in range(len(shp)):
-            N = shp[j]
-            for i in range(N):
-                plt.scatter(1 / (2 * N) + i / N, j * y0, s=min_spacing ** 2 * 5000 * scale ** 2, color='black')
-                
-        plt.ylim(-0.1*y0,y0*depth+0.1*y0)
-        plt.xlim(-0.02,1.02)
 
-        linears = self.linears
-        
-        for ii in range(len(linears)):
-            linear = linears[ii]
-            p = linear.weight
-            p_shp = p.shape
-            
-            if metric == 'w':
-                pass
-            elif metric == 'act':
-                p = self.wa_forward[ii]
-            elif metric == 'fa':
-                p = self.wa_backward[ii]
-            else:
-                raise Exception('metric = \'{}\' not recognized. Choices are \'w\', \'act\', \'fa\'.'.format(metric))
-            for i in range(p_shp[0]):
-                for j in range(p_shp[1]):
-                    plt.plot([1/(2*p_shp[0])+i/p_shp[0], 1/(2*p_shp[1])+j/p_shp[1]], [y0*(ii+1),y0*ii], lw=0.5*scale, alpha=np.tanh(beta*np.abs(p[i,j].cpu().detach().numpy())), color="blue" if p[i,j]>0 else "red")
-                    
-        ax.axis('off')
         
     def reg(self, reg_metric, lamb_l1, lamb_entropy):
         
@@ -200,13 +140,7 @@ class MLP(nn.Module):
     def fit(self, dataset, opt="LBFGS", steps=100, log=1, lamb=0., lamb_l1=1., lamb_entropy=2., loss_fn=None, lr=1., batch=-1,
               metrics=None, in_vars=None, out_vars=None, beta=3, device='cpu', reg_metric='w', display_metrics=None):
 
-        if lamb > 0. and not self.save_act:
-            print('setting lamb=0. If you want to set lamb > 0, set =True')
             
-        old_save_act = self.save_act
-        if lamb == 0.:
-            self.save_act = False
-       
         pbar = tqdm(range(steps), desc='description', ncols=100)
 
         if loss_fn == None:
@@ -241,20 +175,12 @@ class MLP(nn.Module):
             optimizer.zero_grad()
             pred = self.forward(dataset['train_input'][train_id].to(self.device))
             train_loss = loss_fn(pred, dataset['train_label'][train_id].to(self.device))
-            if self.save_act:
-                if reg_metric == 'fa':
-                    self.attribute()
-                reg_ = self.get_reg(reg_metric, lamb_l1, lamb_entropy)
-            else:
-                reg_ = torch.tensor(0.)
+            reg_ = torch.tensor(0.)
             objective = train_loss + lamb * reg_
             objective.backward()
             return objective
 
         for _ in pbar:
-            
-            if _ == steps-1 and old_save_act:
-                self.save_act = True
             
             train_id = np.random.choice(dataset['train_input'].shape[0], batch_size, replace=False)
             test_id = np.random.choice(dataset['test_input'].shape[0], batch_size_test, replace=False)
@@ -265,10 +191,8 @@ class MLP(nn.Module):
             if opt == "Adam":
                 pred = self.forward(dataset['train_input'][train_id].to(self.device))
                 train_loss = loss_fn(pred, dataset['train_label'][train_id].to(self.device))
-                if self.save_act:
-                    reg_ = self.get_reg(reg_metric, lamb_l1, lamb_entropy)
-                else:
-                    reg_ = torch.tensor(0.)
+
+                reg_ = torch.tensor(0.)
                 loss = train_loss + lamb * reg_
                 optimizer.zero_grad()
                 loss.backward()
