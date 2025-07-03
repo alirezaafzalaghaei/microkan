@@ -6,7 +6,7 @@ with open("README.md", "r", encoding="utf8") as fh:
 
 setuptools.setup(
     name="microkan",
-    version="0.0.1",
+    version="0.1.0",
     author="Alireza Afzal Aghaei",
     author_email="alirezaafzalaghaei@gmail.com",
     description="A Kolmogorov Arnold Network for Edge Devices",
