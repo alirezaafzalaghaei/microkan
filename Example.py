@@ -1,7 +1,7 @@
 from kan import *
 set_seed(0)
 
-model = KAN(width=[2, 1, 1], grid=3, k=3, seed=1).speed()
+model = KAN(width=[2, 1, 1], grid=3, k=3, seed=1).speed(compile=False)
 
 f = lambda x: torch.exp(torch.sin(torch.pi * x[:, [0]]) + x[:, [1]] ** 2)
 
