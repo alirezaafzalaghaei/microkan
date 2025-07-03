@@ -5,23 +5,15 @@ with open("README.md", "r", encoding="utf8") as fh:
     long_description = fh.read()
 
 setuptools.setup(
-    name="pykan",
-    version="0.2.8",
-    author="Ziming Liu",
-    author_email="zmliu@mit.edu",
-    description="Kolmogorov Arnold Networks",
+    name="microkan",
+    version="0.0.1",
+    author="Alireza Afzal Aghaei",
+    author_email="alirezaafzalaghaei@gmail.com",
+    description="A Kolmogorov Arnold Network for Edge Devices",
     long_description=long_description,
     long_description_content_type="text/markdown",
-    # url="https://github.com/kindxiaoming/",
-    packages=setuptools.find_packages(),
+    url="https://github.com/alirezaafzalaghaei/microkan",
     include_package_data=True,
-    package_data={  
-        'pykan': [
-            'figures/lock.png',
-            'assets/img/sum_symbol.png',
-            'assets/img/mult_symbol.png',
-        ],
-    },
     classifiers=[
         "Programming Language :: Python :: 3",
         "License :: OSI Approved :: MIT License",
