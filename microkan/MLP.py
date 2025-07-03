@@ -8,36 +8,37 @@ seed = 0
 torch.manual_seed(seed)
 
 class MLP(nn.Module):
-    
-    def __init__(self, width, act='silu', seed=0, device='cpu'):
+
+    def __init__(self, width, act=torch.nn.SiLU(), save_act=True, seed=0, device='cpu'):
         super(MLP, self).__init__()
-        
+
         torch.manual_seed(seed)
-        
+
         linears = []
         self.width = width
         self.depth = depth = len(width) - 1
         for i in range(depth):
             linears.append(nn.Linear(width[i], width[i+1]))
         self.linears = nn.ModuleList(linears)
-        
+
         #if activation == 'silu':
-        self.act_fun = torch.nn.SiLU()
+        self.act_fun = act
+        self.save_act = save_act
         self.acts = None
-        
+
         self.cache_data = None
-        
+
         self.device = device
         self.to(device)
-        
-        
+
+
     def to(self, device):
         super(MLP, self).to(device)
         self.device = device
-        
+
         return self
-        
-        
+
+
     def get_act(self, x=None):
         if isinstance(x, dict):
             x = x['train_input']
@@ -47,27 +48,27 @@ class MLP(nn.Module):
             else:
                 raise Exception("missing input data x")
         self.forward(x)
-        
+
     @property
     def w(self):
         return [self.linears[l].weight for l in range(self.depth)]
-        
+
     def forward(self, x):
-        
+
         # cache data
         self.cache_data = x
-        
+
         self.acts = []
         self.acts_scale = []
         self.wa_forward = []
         self.a_forward = []
-        
+
         for i in range(self.depth):
             x = self.linears[i](x)
             if i < self.depth - 1:
                 x = self.act_fun(x)
         return x
-    
+
     def attribute(self):
         if self.acts == None:
             self.get_act()
@@ -93,9 +94,9 @@ class MLP(nn.Module):
         self.edge_scores = list(reversed(edge_scores))
         self.wa_backward = self.edge_scores
 
-        
+
     def reg(self, reg_metric, lamb_l1, lamb_entropy):
-        
+
         if reg_metric == 'w':
             acts_scale = self.w
         if reg_metric == 'act':
@@ -104,7 +105,7 @@ class MLP(nn.Module):
             acts_scale = self.wa_backward
         if reg_metric == 'a':
             acts_scale = self.acts_scale
-        
+
         if len(acts_scale[0].shape) == 2:
             reg_ = 0.
 
@@ -118,9 +119,9 @@ class MLP(nn.Module):
                 entropy_row = - torch.mean(torch.sum(p_row * torch.log2(p_row + 1e-4), dim=1))
                 entropy_col = - torch.mean(torch.sum(p_col * torch.log2(p_col + 1e-4), dim=0))
                 reg_ += lamb_l1 * l1 + lamb_entropy * (entropy_row + entropy_col)
-                
+
         elif len(acts_scale[0].shape) == 1:
-            
+
             reg_ = 0.
 
             for i in range(len(acts_scale)):
@@ -133,14 +134,14 @@ class MLP(nn.Module):
                 reg_ += lamb_l1 * l1 + lamb_entropy * entropy
 
         return reg_
-    
+
     def get_reg(self, reg_metric, lamb_l1, lamb_entropy):
         return self.reg(reg_metric, lamb_l1, lamb_entropy)
-        
+
     def fit(self, dataset, opt="LBFGS", steps=100, log=1, lamb=0., lamb_l1=1., lamb_entropy=2., loss_fn=None, lr=1., batch=-1,
               metrics=None, in_vars=None, out_vars=None, beta=3, device='cpu', reg_metric='w', display_metrics=None):
 
-            
+
         pbar = tqdm(range(steps), desc='description', ncols=100)
 
         if loss_fn == None:
@@ -181,7 +182,7 @@ class MLP(nn.Module):
             return objective
 
         for _ in pbar:
-            
+
             train_id = np.random.choice(dataset['train_input'].shape[0], batch_size, replace=False)
             test_id = np.random.choice(dataset['test_input'].shape[0], batch_size_test, replace=False)
 
@@ -199,8 +200,8 @@ class MLP(nn.Module):
                 optimizer.step()
 
             test_loss = loss_fn_eval(self.forward(dataset['test_input'][test_id].to(self.device)), dataset['test_label'][test_id].to(self.device))
-            
-            
+
+
             if metrics != None:
                 for i in range(len(metrics)):
                     results[metrics[i].__name__].append(metrics[i]().item())
@@ -223,9 +224,9 @@ class MLP(nn.Module):
                             raise Exception(f'{metric} not recognized')
                         data += (results[metric][-1],)
                     pbar.set_description(string % data)
-           
+
         return results
-    
+
     @property
     def connection_cost(self):
 
@@ -246,7 +247,7 @@ class MLP(nn.Module):
                 cc += torch.sum(dist * t)
 
         return cc
-    
+
     def swap(self, l, i1, i2):
 
         def swap_row(data, i1, i2):
@@ -258,7 +259,7 @@ class MLP(nn.Module):
         swap_row(self.linears[l-1].weight.data, i1, i2)
         swap_row(self.linears[l-1].bias.data, i1, i2)
         swap_col(self.linears[l].weight.data, i1, i2)
-    
+
     def auto_swap_l(self, l):
 
         num = self.width[l]
@@ -278,7 +279,7 @@ class MLP(nn.Module):
         depth = self.depth
         for l in range(1, depth):
             self.auto_swap_l(l)
-            
+
     def tree(self, x=None, in_var=None, style='tree', sym_th=1e-3, sep_th=1e-1, skip_sep_test=False, verbose=False):
         if x == None:
             x = self.cache_data
